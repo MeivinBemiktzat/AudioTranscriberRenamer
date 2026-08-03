@@ -1,0 +1,44 @@
+```yaml
+name: Build APP
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install pyinstaller
+
+      - name: Build APP.EXE
+        run: pyinstaller --onefile --windowed --name app app.py
+
+      - name: Upload APP.EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-windows
+          path: dist/app.exe
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/app.exe
+          generate_release_notes: true
+```
