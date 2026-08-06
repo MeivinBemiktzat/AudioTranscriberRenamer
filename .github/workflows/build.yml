@@ -1,4 +1,4 @@
-name: Save NPM README
+name: Save Yemot SDK Documentation
 
 on:
   workflow_dispatch:
@@ -7,21 +7,45 @@ permissions:
   contents: write
 
 jobs:
-  save-readme:
+  save-docs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Download README
+      - name: Download npm package
         run: |
-          npm view @pitron-ai/yemot-sdk@beta readme > README_FROM_NPM.md
+          npm pack @pitron-ai/yemot-sdk@beta
 
-      - name: Create Release
+      - name: Extract README
+        run: |
+          mkdir package_extract
+          tar -xzf *.tgz -C package_extract
+          
+          if [ -f package_extract/package/README.md ]; then
+            cp package_extract/package/README.md README_FROM_NPM.md
+          else
+            echo "README.md not found in package"
+            exit 1
+          fi
+
+      - name: Check README
+        run: |
+          echo "README size:"
+          wc -c README_FROM_NPM.md
+          echo "Preview:"
+          head -50 README_FROM_NPM.md
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: npm-readme
-          name: NPM README
-          files: README_FROM_NPM.md
+          tag_name: yemot-sdk-docs
+          name: Yemot SDK Documentation
+          body: |
+            Documentation extracted automatically from npm package:
+            @pitron-ai/yemot-sdk@beta
+          files: |
+            README_FROM_NPM.md
