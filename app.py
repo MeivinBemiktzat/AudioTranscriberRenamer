@@ -1,338 +1,112 @@
-```python
-import subprocess
-import threading
-from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext
+import os
+from gemini_client import GeminiClient
 
-BASE = Path(__file__).resolve().parent
-ENGINES = BASE / "engines"
-
-class AIStudio:
-    def __init__(self, root):
+class GeminiGUIApp:
+    def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("AI Studio")
-        self.root.geometry("1000x700")
-        self.root.minsize(850, 600)
-        self.root.configure(bg="#0f172a")
+        self.root.title("Gemini CLI Desktop")
+        self.root.geometry("800x650")
+        self.root.minsize(600, 450)
 
-        self.model = None
-        self.process = None
+        self.client = GeminiClient()
 
-        self.build_ui()
+        self._setup_ui()
 
-    def build_ui(self):
-        header = tk.Frame(self.root, bg="#0f172a")
-        header.pack(fill="x", padx=30, pady=25)
+    def _setup_ui(self):
+        # API Key Frame
+        key_frame = ttk.LabelFrame(self.root, text="הגדרות אבטחה", padding=10)
+        key_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        tk.Label(
-            header,
-            text="AI Studio",
-            bg="#0f172a",
-            fg="white",
-            font=("Segoe UI", 28, "bold")
-        ).pack(anchor="e")
+        ttk.Label(key_frame, text="GEMINI_API_KEY:").pack(side=tk.LEFT, padx=5)
+        self.api_key_entry = ttk.Entry(key_frame, show="*", width=40)
+        self.api_key_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # טעינת מפתח מסביבת העבודה אם קיים
+        if "GEMINI_API_KEY" in os.environ:
+            self.api_key_entry.insert(0, os.environ["GEMINI_API_KEY"])
 
-        tk.Label(
-            header,
-            text="הרצת מודלי AI מקומיים",
-            bg="#0f172a",
-            fg="#94a3b8",
-            font=("Segoe UI", 12)
-        ).pack(anchor="e")
+        # Chat display area
+        display_frame = ttk.Frame(self.root, padding=10)
+        display_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        main = tk.Frame(self.root, bg="#172033")
-        main.pack(fill="both", expand=True, padx=30, pady=10)
+        self.chat_display = scrolledtext.ScrolledText(display_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10))
+        self.chat_display.pack(fill=tk.BOTH, expand=True)
 
-        sidebar = tk.Frame(main, bg="#172033", width=280)
-        sidebar.pack(side="right", fill="y", padx=20, pady=20)
+        # Status Bar
+        self.status_var = tk.StringVar(value="מוכן לפעולה")
+        self.status_label = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W, padding=5)
+        self.status_label.pack(fill=tk.X, side=tk.BOTTOM)
 
-        tk.Label(
-            sidebar,
-            text="בחירת מודל",
-            bg="#172033",
-            fg="white",
-            font=("Segoe UI", 17, "bold")
-        ).pack(anchor="e", pady=(0, 15))
+        # Input Frame
+        input_frame = ttk.Frame(self.root, padding=10)
+        input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
 
-        tk.Button(
-            sidebar,
-            text="📁  בחר קובץ GGUF",
-            command=self.select_model,
-            bg="#7c3aed",
-            fg="white",
-            activebackground="#6d28d9",
-            relief="flat",
-            font=("Segoe UI", 11, "bold"),
-            padx=15,
-            pady=12,
-            cursor="hand2"
-        ).pack(fill="x")
+        self.prompt_entry = ttk.Entry(input_frame, font=("Segoe UI", 10))
+        self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.prompt_entry.bind("<Return>", lambda e: self.send_prompt())
 
-        self.model_name = tk.Label(
-            sidebar,
-            text="לא נבחר מודל",
-            bg="#172033",
-            fg="#e2e8f0",
-            wraplength=250,
-            justify="right",
-            font=("Segoe UI", 10)
-        )
-        self.model_name.pack(anchor="e", pady=20)
+        self.send_btn = ttk.Button(input_frame, text="שלח", command=self.send_prompt)
+        self.send_btn.pack(side=tk.LEFT, padx=2)
 
-        self.model_type = tk.Label(
-            sidebar,
-            text="סוג: —",
-            bg="#172033",
-            fg="#94a3b8",
-            font=("Segoe UI", 10)
-        )
-        self.model_type.pack(anchor="e")
+        self.stop_btn = ttk.Button(input_frame, text="עצור", command=self.stop_execution, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=2)
 
-        self.run_button = tk.Button(
-            sidebar,
-            text="▶  הרץ מודל",
-            command=self.run_model,
-            state="disabled",
-            bg="#334155",
-            fg="white",
-            relief="flat",
-            font=("Segoe UI", 11, "bold"),
-            pady=11
-        )
-        self.run_button.pack(fill="x", pady=(30, 8))
+        self.clear_btn = ttk.Button(input_frame, text="נקה", command=self.clear_chat)
+        self.clear_btn.pack(side=tk.LEFT, padx=2)
 
-        tk.Button(
-            sidebar,
-            text="■  עצור",
-            command=self.stop_model,
-            bg="#334155",
-            fg="white",
-            relief="flat",
-            font=("Segoe UI", 10),
-            pady=10
-        ).pack(fill="x")
+    def append_chat(self, text: str):
+        self.chat_display.config(state=tk.NORMAL)
+        self.chat_display.insert(tk.END, text)
+        self.chat_display.see(tk.END)
+        self.chat_display.config(state=tk.DISABLED)
 
-        content = tk.Frame(main, bg="#172033")
-        content.pack(side="left", fill="both", expand=True, padx=(0, 20), pady=20)
-
-        tk.Label(
-            content,
-            text="פרומפט",
-            bg="#172033",
-            fg="white",
-            font=("Segoe UI", 17, "bold")
-        ).pack(anchor="e")
-
-        self.prompt = tk.Text(
-            content,
-            height=7,
-            bg="#0b1220",
-            fg="white",
-            insertbackground="white",
-            relief="flat",
-            wrap="word",
-            font=("Segoe UI", 11)
-        )
-        self.prompt.pack(fill="x", pady=12)
-
-        tk.Label(
-            content,
-            text="פלט",
-            bg="#172033",
-            fg="white",
-            font=("Segoe UI", 17, "bold")
-        ).pack(anchor="e", pady=(10, 0))
-
-        self.output = scrolledtext.ScrolledText(
-            content,
-            bg="#0b1220",
-            fg="#dbeafe",
-            insertbackground="white",
-            relief="flat",
-            wrap="word",
-            font=("Consolas", 10)
-        )
-        self.output.pack(fill="both", expand=True, pady=12)
-
-        self.status = tk.Label(
-            self.root,
-            text="מוכן",
-            bg="#0b1220",
-            fg="#94a3b8",
-            anchor="e",
-            padx=30,
-            pady=8,
-            font=("Segoe UI", 9)
-        )
-        self.status.pack(fill="x")
-
-    def select_model(self):
-        filename = filedialog.askopenfilename(
-            title="בחר מודל GGUF",
-            filetypes=[
-                ("מודלי GGUF", "*.gguf"),
-                ("כל הקבצים", "*.*")
-            ]
-        )
-
-        if not filename:
-            return
-
-        self.model = Path(filename)
-        name = self.model.name.lower()
-
-        if "stable-diffusion" in name:
-            model_type = "Stable Diffusion — תמונה"
-        elif "ltx" in name:
-            model_type = "LTX-Video — וידאו"
-        elif "yue" in name:
-            model_type = "YuE — מוזיקה"
-        elif "llama" in name or "mesh" in name:
-            model_type = "LLaMA / GGUF — טקסט"
-        else:
-            model_type = "GGUF — לא זוהה"
-
-        self.model_name.config(text=self.model.name)
-        self.model_type.config(text="סוג: " + model_type)
-        self.run_button.config(state="normal")
-        self.status.config(text="המודל נבחר — מוכן")
-
-    def run_model(self):
-        if not self.model:
-            return
-
-        name = self.model.name.lower()
-        prompt = self.prompt.get("1.0", "end").strip()
+    def send_prompt(self):
+        prompt = self.prompt_entry.get().strip()
+        api_key = self.api_key_entry.get().strip()
 
         if not prompt:
-            prompt = "שלום! ענה בעברית."
-
-        if "llama" in name or "mesh" in name:
-            executable = ENGINES / "llama-cli.exe"
-
-            if not executable.exists():
-                messagebox.showerror(
-                    "מנוע חסר",
-                    "לא נמצא llama-cli.exe בתוך תיקיית engines."
-                )
-                return
-
-            command = [
-                str(executable),
-                "-m",
-                str(self.model),
-                "-p",
-                prompt,
-                "-n",
-                "512"
-            ]
-
-        elif "stable-diffusion" in name:
-            executable = ENGINES / "sd-cli.exe"
-
-            if not executable.exists():
-                messagebox.showerror(
-                    "מנוע חסר",
-                    "לא נמצא sd-cli.exe בתוך תיקיית engines."
-                )
-                return
-
-            output_file = BASE / "output.png"
-
-            command = [
-                str(executable),
-                "-m",
-                str(self.model),
-                "-p",
-                prompt,
-                "-o",
-                str(output_file)
-            ]
-
-        elif "ltx" in name:
-            messagebox.showinfo(
-                "LTX-Video",
-                "LTX-Video זוהה, אך עדיין לא חובר מנוע ההרצה שלו."
-            )
             return
 
-        elif "yue" in name:
-            messagebox.showinfo(
-                "YuE",
-                "YuE זוהה, אך עדיין לא חובר מנוע ההרצה שלו."
-            )
+        if not api_key:
+            messagebox.showwarning("שגיאה", "אנא הזן GEMINI_API_KEY תקין לפני שליחת הבקשה.")
             return
 
-        else:
-            messagebox.showwarning(
-                "מודל לא מזוהה",
-                "לא נמצא מנוע מתאים לקובץ הזה."
-            )
-            return
+        self.prompt_entry.delete(0, tk.END)
+        self.append_chat(f"\n\n--- You ---\n{prompt}\n\n--- Gemini ---\n")
+        
+        self.send_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.status_var.set("Gemini מעבד את הבקשה...")
 
-        self.output.delete("1.0", "end")
-        self.status.config(text="מריץ מודל...")
-        self.run_button.config(state="disabled")
+        def on_data(data: str):
+            self.root.after(0, self.append_chat, data)
 
-        def worker():
-            try:
-                self.process = subprocess.Popen(
-                    command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace"
-                )
+        def on_complete(code: int):
+            def update():
+                self.send_btn.config(state=tk.NORMAL)
+                self.stop_btn.config(state=tk.DISABLED)
+                if code == 0:
+                    self.status_var.set("הושלם בהצלחה")
+                else:
+                    self.status_var.set(f"התהליך הסתיים עם קוד שגיאה: {code}")
+            self.root.after(0, update)
 
-                for line in self.process.stdout:
-                    self.root.after(
-                        0,
-                        lambda x=line: self.write_output(x)
-                    )
+        self.client.run_prompt_async(prompt, api_key, on_data, on_complete)
 
-                code = self.process.wait()
+    def stop_execution(self):
+        self.client.stop()
+        self.status_var.set("הפעולה הופסקה על ידי המשתמש")
+        self.send_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
 
-                self.root.after(
-                    0,
-                    lambda: self.status.config(
-                        text=f"ההרצה הסתיימה — קוד {code}"
-                    )
-                )
-
-            except Exception as error:
-                self.root.after(
-                    0,
-                    lambda: self.write_output(
-                        f"\nשגיאה: {error}\n"
-                    )
-                )
-
-            finally:
-                self.process = None
-                self.root.after(
-                    0,
-                    lambda: self.run_button.config(state="normal")
-                )
-
-        threading.Thread(
-            target=worker,
-            daemon=True
-        ).start()
-
-    def write_output(self, text):
-        self.output.insert("end", text)
-        self.output.see("end")
-
-    def stop_model(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.status.config(text="ההרצה נעצרה")
-
+    def clear_chat(self):
+        self.chat_display.config(state=tk.NORMAL)
+        self.chat_display.delete("1.0", tk.END)
+        self.chat_display.config(state=tk.DISABLED)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = AIStudio(root)
+    app = GeminiGUIApp(root)
     root.mainloop()
-```
