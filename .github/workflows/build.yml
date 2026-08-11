@@ -1,51 +1,59 @@
-name: Save Yemot SDK Documentation
+name: Build and Release Windows EXE
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  save-docs:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
 
     steps:
-      - name: Setup Node.js
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js (Required to build bundled CLI)
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '20'
 
-      - name: Download npm package
+      - name: Install Dependencies
         run: |
-          npm pack @pitron-ai/yemot-sdk@beta
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Extract README
+      - name: Bundle Gemini CLI to Binary using pkg
         run: |
-          mkdir package_extract
-          tar -xzf *.tgz -C package_extract
-          
-          if [ -f package_extract/package/README.md ]; then
-            cp package_extract/package/README.md README_FROM_NPM.md
-          else
-            echo "README.md not found in package"
-            exit 1
-          fi
+          npm install -g @google/generative-ai-cli pkg
+          mkdir bundled
+          npx pkg --targets node18-win-x64 npx @google/generative-ai-cli --output bundled/gemini.exe
+        continue-on-error: true
 
-      - name: Check README
+      - name: Build Executable with PyInstaller
         run: |
-          echo "README size:"
-          wc -c README_FROM_NPM.md
-          echo "Preview:"
-          head -50 README_FROM_NPM.md
+          pyinstaller --noconfirm --onedir --windowed --name "GeminiGUI-Windows-x64" app.py
+
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path dist/GeminiGUI-Windows-x64/* -DestinationPath GeminiGUI-Windows-x64.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeminiGUI-Windows-x64
+          path: GeminiGUI-Windows-x64.zip
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: yemot-sdk-docs
-          name: Yemot SDK Documentation
-          body: |
-            Documentation extracted automatically from npm package:
-            @pitron-ai/yemot-sdk@beta
-          files: |
-            README_FROM_NPM.md
+          files: GeminiGUI-Windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
