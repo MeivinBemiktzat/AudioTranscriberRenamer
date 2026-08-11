@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-and-release:
@@ -46,11 +47,18 @@ jobs:
         run: |
           Compress-Archive -Path dist/GeminiGUI-Windows-x64/* -DestinationPath GeminiGUI-Windows-x64.zip
 
+      - name: Upload Artifact (For Manual Runs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeminiGUI-Windows-x64
+          path: GeminiGUI-Windows-x64.zip
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: GeminiGUI-Windows-x64.zip
           name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name != 'main' && github.ref_name || 'manual-build' }}
           draft: false
           prerelease: false
         env:
