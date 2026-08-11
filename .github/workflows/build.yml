@@ -4,11 +4,13 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
+
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -19,17 +21,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Set up Node.js (Required to build bundled CLI)
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Bundle Gemini CLI to Binary using pkg
+      - name: Bundle Gemini CLI to Binary
         run: |
           npm install -g @google/generative-ai-cli pkg
           mkdir bundled
@@ -40,20 +42,16 @@ jobs:
         run: |
           pyinstaller --noconfirm --onedir --windowed --name "GeminiGUI-Windows-x64" app.py
 
-      - name: Create ZIP archive
+      - name: Create ZIP Archive
         run: |
           Compress-Archive -Path dist/GeminiGUI-Windows-x64/* -DestinationPath GeminiGUI-Windows-x64.zip
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: GeminiGUI-Windows-x64
-          path: GeminiGUI-Windows-x64.zip
-
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: GeminiGUI-Windows-x64.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
