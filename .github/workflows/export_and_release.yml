@@ -1,0 +1,42 @@
+name: Export Redis to Release ZIP
+
+on:
+  workflow_dispatch: # מאפשר להפעיל את התהליך ידנית בלחיצת כפתור
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Run Export Script
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          python script.py
+
+      - name: Create ZIP archive
+        run: |
+          zip -r exported_files.zip exported_json_files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: exported_files.zip
+          tag_name: v1.0.${{ github.run_number }}
+          name: Redis Data Export #${{ github.run_number }}
+          body: "כל קבצי ה-JSON שהוצאו מ-Redis מוכנים להורדה בקובץ ה-ZIP."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
