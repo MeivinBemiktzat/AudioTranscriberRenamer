@@ -1,13 +1,15 @@
 import json
 import os
+import sys
 import requests
 from rdbtools import RdbCallback, RdbParser
 
-# תוכל לשים כאן את הקישור המעודכן או לשלוף אותו מ-secrets
-RDB_URL = os.environ.get(
-    "RDB_DOWNLOAD_URL",
-    "https://upstash-rdb-import.s3.us-east-1.amazonaws.com/8f4a8013-9017-4b2a-b6cf-fae866653d77.rdb?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
-)
+# שליפת הקישור מתוך משתני הסביבה של ה-Workflow
+RDB_URL = os.environ.get("RDB_DOWNLOAD_URL")
+
+if not RDB_URL:
+  print("שגיאה: לא סופק קישור להורדה במשתנה הסביבה RDB_DOWNLOAD_URL.")
+  sys.exit(1)
 
 RDB_FILE_PATH = "dump.rdb"
 OUTPUT_DIR = "./exported_json_files"
