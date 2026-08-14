@@ -1,7 +1,11 @@
 name: Export Redis to Release ZIP
 
 on:
-  workflow_dispatch: # מאפשר להפעיל את התהליך ידנית בלחיצת כפתור
+  workflow_dispatch:
+
+# הרשאות נדרשות ליצירת Release
+permissions:
+  contents: write
 
 jobs:
   build-and-release:
