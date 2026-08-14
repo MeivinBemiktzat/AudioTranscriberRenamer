@@ -1,9 +1,8 @@
-name: Export Redis to Release ZIP
+name: Export RDB to Release ZIP
 
 on:
   workflow_dispatch:
 
-# הרשאות נדרשות ליצירת Release
 permissions:
   contents: write
 
@@ -18,22 +17,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
-          pip install requests
+          pip install requests rdbtools
 
-      - name: Run Export Script
-        env:
-          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
-          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      - name: Run RDB Conversion Script
         run: |
-          python script.py
+          python convert_rdb.py
 
       - name: Create ZIP archive
         run: |
-          zip -r exported_files.zip exported_json_files/
+          cd exported_json_files
+          zip -r ../exported_files.zip .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -41,6 +38,6 @@ jobs:
           files: exported_files.zip
           tag_name: v1.0.${{ github.run_number }}
           name: Redis Data Export #${{ github.run_number }}
-          body: "כל קבצי ה-JSON שהוצאו מ-Redis מוכנים להורדה בקובץ ה-ZIP."
+          body: "כל קבצי ה-JSON שהוצאו מקובץ ה-RDB מוכנים להורדה בקובץ ה-ZIP."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
