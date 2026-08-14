@@ -2,6 +2,11 @@ name: Export RDB to Release ZIP
 
 on:
   workflow_dispatch:
+    inputs:
+      rdb_url:
+        description: 'הדבק כאן את הקישור המלא להורדת ה-RDB מ-Upstash'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -24,6 +29,8 @@ jobs:
           pip install requests rdbtools
 
       - name: Run RDB Conversion Script
+        env:
+          RDB_DOWNLOAD_URL: ${{ inputs.rdb_url }}
         run: |
           python convert_rdb.py
 
