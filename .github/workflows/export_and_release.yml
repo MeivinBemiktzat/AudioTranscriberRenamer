@@ -1,10 +1,10 @@
-name: Export RDB to Release ZIP
+name: Download RDB and Release ZIP
 
 on:
   workflow_dispatch:
     inputs:
       rdb_url:
-        description: 'הדבק כאן את הקישור המלא להורדת ה-RDB מ-Upstash'
+        description: 'הדבק כאן את הקישור להורדת ה-RDB מ-Upstash'
         required: true
         type: string
 
@@ -22,29 +22,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.x'
 
       - name: Install dependencies
         run: |
-          pip install requests rdbtools
+          pip install requests
 
-      - name: Run RDB Conversion Script
+      - name: Run RDB Download Script
         env:
           RDB_DOWNLOAD_URL: ${{ inputs.rdb_url }}
         run: |
-          python convert_rdb.py
+          python download_rdb.py
 
       - name: Create ZIP archive
         run: |
-          cd exported_json_files
-          zip -r ../exported_files.zip .
+          zip -r rdb_backup.zip dump.rdb
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: exported_files.zip
+          files: rdb_backup.zip
           tag_name: v1.0.${{ github.run_number }}
-          name: Redis Data Export #${{ github.run_number }}
-          body: "כל קבצי ה-JSON שהוצאו מקובץ ה-RDB מוכנים להורדה בקובץ ה-ZIP."
+          name: Redis RDB Backup #${{ github.run_number }}
+          body: "קובץ ה-dump.rdb המקורי מוכן להורדה בקובץ ה-ZIP."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
