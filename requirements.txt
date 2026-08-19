@@ -1,1 +1,4 @@
-pyinstaller>=6.0.0
+SpeechRecognition==3.10.4
+pydub==0.25.1
+imageio-ffmpeg==0.5.1
+pyinstaller==6.11.1
