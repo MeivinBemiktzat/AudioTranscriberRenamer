@@ -3,16 +3,18 @@ name: Build and Release Windows EXE
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
+      - '[0-9]+.[0-9]+*'
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build Portable EXE
+    name: Build Portable Windows EXE
     runs-on: windows-latest
 
     steps:
@@ -30,15 +32,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Windows Standalone EXE with PyInstaller
+      - name: Build Standalone EXE with PyInstaller
         shell: pwsh
         run: |
-          $iconArg = ""
+          $buildArgs = @(
+            "--noconfirm",
+            "--onefile",
+            "--windowed",
+            "--name=AudioTranscriberRenamer",
+            "--collect-all=imageio_ffmpeg",
+            "--collect-all=speech_recognition"
+          )
+          
           if (Test-Path "assets/icon.ico") {
-            $iconArg = "--icon=assets/icon.ico --add-data `"assets/icon.ico;assets`""
+            $buildArgs += "--icon=assets/icon.ico"
+            $buildArgs += "--add-data=assets/icon.ico;assets"
           }
           
-          Invoke-Expression "pyinstaller --noconfirm --onedir --windowed --onefile $iconArg --name AudioTranscriberRenamer main.py"
+          $buildArgs += "main.py"
+          
+          & pyinstaller $buildArgs
+
+      - name: Verify EXE Creation
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/AudioTranscriberRenamer.exe")) {
+            Write-Error "dist/AudioTranscriberRenamer.exe was not created!"
+            exit 1
+          }
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -46,20 +67,18 @@ jobs:
           name: AudioTranscriberRenamer-Windows
           path: dist/AudioTranscriberRenamer.exe
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Release ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: dist/AudioTranscriberRenamer.exe
-          body: |
-            ## Audio Transcriber & Renamer - גרסה ${{ github.ref_name }}
-            
-            תוכנה עצמאית ל-Windows לתמלול ושינוי שמות קובצי שמע.
-            
-            ### הוראות הפעלה:
-            1. הורד את הקובץ `AudioTranscriberRenamer.exe` המצורף מטה.
-            2. הפעל בלחיצה כפולה (אין צורך בהתקנת Python).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tagName = "${{ github.ref_name }}"
+          $exePath = "dist/AudioTranscriberRenamer.exe"
+          
+          Write-Host "Creating GitHub Release for tag: $tagName"
+          
+          gh release create $tagName $exePath `
+            --title "Audio Transcriber & Renamer $tagName" `
+            --notes "גרסה חדשה של התוכנה מוכנה לשימוש ב-Windows. הורד את הקובץ AudioTranscriberRenamer.exe והפעל." `
+            --clobber
